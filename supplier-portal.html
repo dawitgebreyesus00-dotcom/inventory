@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supplier Portal</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .po { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .status { padding: 3px 8px; border-radius: 3px; color: white; font-size: 12px; }
+        .sent { background: #007bff; }
+        .confirmed { background: #28a745; }
+        .shipped { background: #6f42c1; }
+        button { padding: 8px 15px; margin: 5px; border: none; border-radius: 3px; cursor: pointer; }
+        .confirm-btn { background: #28a745; color: white; }
+        .ship-btn { background: #6f42c1; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Supplier Portal</h1>
+    <div>
+        <label>Supplier:</label>
+        <select id="supplierSelect">
+            <option value="">Select Supplier</option>
+        </select>
+        <button onclick="loadPOs()">Load Purchase Orders</button>
+    </div>
+    
+    <div id="purchaseOrders"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api';
+        
+        // Load suppliers on page load
+        window.onload = async () => {
+            try {
+                const response = await fetch(`${API_BASE}/suppliers`);
+                const suppliers = await response.json();
+                const select = document.getElementById('supplierSelect');
+                
+                const supplierArray = Array.isArray(suppliers) ? suppliers : suppliers.data || [];
+                supplierArray.forEach(supplier => {
+                    const option = document.createElement('option');
+                    option.value = supplier._id;
+                    option.textContent = supplier.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading suppliers:', error);
+            }
+        };
+
+        async function loadPOs() {
+            const supplierId = document.getElementById('supplierSelect').value;
+            if (!supplierId) {
+                alert('Please select a supplier');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/purchase-orders?supplier=${supplierId}`);
+                const data = await response.json();
+                const container = document.getElementById('purchaseOrders');
+                
+                if (data.orders && data.orders.length > 0) {
+                    container.innerHTML = data.orders.map(po => `
+                        <div class="po">
+                            <h3>Purchase Order: ${po.poNumber}</h3>
+                            <p><strong>Status:</strong> <span class="status ${po.status}">${po.status.toUpperCase()}</span></p>
+                            <p><strong>Order Date:</strong> ${new Date(po.orderDate).toLocaleDateString()}</p>
+                            <p><strong>Total Amount:</strong> $${po.totalAmount}</p>
+                            <p><strong>Items:</strong></p>
+                            <ul>
+                                ${po.items.map(item => `
+                                    <li>${item.product?.name || 'Product'} - Qty: ${item.quantity} @ $${item.unitCost}</li>
+                                `).join('')}
+                            </ul>
+                            ${po.notes ? `<p><strong>Notes:</strong> ${po.notes}</p>` : ''}
+                            
+                            ${po.status === 'sent' ? `
+                                <button class="confirm-btn" onclick="confirmPO('${po._id}')">Confirm Order</button>
+                            ` : ''}
+                            
+                            ${po.status === 'confirmed' ? `
+                                <button class="ship-btn" onclick="shipPO('${po._id}')">Mark as Shipped</button>
+                            ` : ''}
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p>No purchase orders found for this supplier.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading POs:', error);
+                document.getElementById('purchaseOrders').innerHTML = '<p>Error loading purchase orders.</p>';
+            }
+        }
+
+        async function confirmPO(poId) {
+            const estimatedDelivery = prompt('Enter estimated delivery date (YYYY-MM-DD):');
+            const supplierNotes = prompt('Enter any notes (optional):') || '';
+            
+            try {
+                const response = await fetch(`${API_BASE}/purchase-orders/${poId}/confirm`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ estimatedDelivery, supplierNotes })
+                });
+                
+                if (response.ok) {
+                    alert('Purchase order confirmed successfully!');
+                    loadPOs();
+                } else {
+                    alert('Error confirming purchase order');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error confirming purchase order');
+            }
+        }
+
+        async function shipPO(poId) {
+            const trackingNumber = prompt('Enter tracking number:') || '';
+            const carrier = prompt('Enter carrier name:') || '';
+            const estimatedArrival = prompt('Enter estimated arrival date (YYYY-MM-DD):');
+            
+            try {
+                const response = await fetch(`${API_BASE}/purchase-orders/${poId}/ship`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ trackingNumber, carrier, estimatedArrival })
+                });
+                
+                if (response.ok) {
+                    alert('Purchase order marked as shipped!');
+                    loadPOs();
+                } else {
+                    alert('Error shipping purchase order');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error shipping purchase order');
+            }
+        }
+    </script>
+</body>
+</html>
